@@ -1,0 +1,12 @@
+$ snowsql -a QSISEDK-PSA51301 -u SALMANSHAIKH --authenticator externalbrowser
+Sairabanu\@usf2024
+
+##Connect using snowflake config
+$ snowsql -c example
+
+
+
+
+https://jupysql.ploomber.io/en/latest/compose.html
+
+https://pypi.org/project/snowflake-sqlalchemy/

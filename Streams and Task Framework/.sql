@@ -1,0 +1,148 @@
+
+CALL DB.SCHEMA.LOAD_TARGET_TABLE();
+
+
+SELECT  
+    *
+FROM
+    DB.SCHEMA.TARGET_TABLE;
+
+WHERE
+    IS_ACTIVE = TRUE;
+
+
+SELECT * FROM DB.SHAREDOBJE CTS.SOURCE_TABLE_STREAM;
+
+
+
+---Update source
+UPDATE
+    DB.SCHEMA.SOURCE_TABLE
+SET
+    CUSTOMER_NAME ='RAM'
+WHERE
+    LOAN_NUMBER ='LN004';
+
+
+--See if changes reflecting in target
+SELECT  
+    *
+FROM
+    DB.SCHEMA.TARGET_TABLE
+WHERE
+    IS_ACTIVE = TRUE
+    AND LOAN_NUMBER= 'LN004';
+
+
+
+--Insert changes
+INSERT INTO DB.SCHEMA.SOURCE_TABLE VALUES
+('12231', 'John Doe', 25000.00, '2023-01-15', 'ACTIVE');
+
+
+--See if changes reflecting in target
+SELECT  
+    *
+FROM
+    DB.SCHEMA.TARGET_TABLE
+WHERE
+    IS_ACTIVE = TRUE
+    AND LOAN_NUMBER= '12231';
+
+
+--delete the record from source
+
+DELETE
+FROM
+    DB.SCHEMA.SOURCE_TABLE
+WHERE
+    LOAN_NUMBER = 'LN002';
+
+
+
+
+
+---FAILURE SCENARIOS 
+
+--1. WHEN SOURCE TABLE GET RECREATED.
+    --Streams becomes stale. 
+    --Source will additional rows before we recreate stream. so we are missing some rows
+    
+
+
+--2. WHEN WE ADD ADDITIONAL COLUMN IN SOURCE.
+    --If SOURCE did ALTER TABLE ADD COLUMN THEN WE ARE GOOD OR IT WILL AGAIN HAVE STREAM STALENESS ISSUE.
+
+
+
+--3. Error in Transformation which make us loose consumed stream.
+    --Once we consumed stream it is gone. so we failed in transformation phase we loose our data.
+
+
+
+---SCENARIO 1
+--RECREATED TABLE STREAM GOT STALE NOW RUNNING SP
+
+    --STREAM GOT RECREATED 
+    --TARGET GOT UPDATED FROM SOURCE WITH FULL UPDATE
+
+
+    SELECT *
+    FROM (
+        (SELECT LOAN_NUMBER, CUSTOMER_NAME, LOAN_AMOUNT, LOAN_START_DATE, LOAN_STATUS 
+        FROM DB.SCHEMA.SOURCE_TABLE
+        MINUS
+        SELECT LOAN_NUMBER, CUSTOMER_NAME, LOAN_AMOUNT, LOAN_START_DATE, LOAN_STATUS 
+        FROM DB.SCHEMA.TARGET_TABLE 
+        WHERE IS_ACTIVE = TRUE)
+        
+        UNION ALL
+        
+        (SELECT LOAN_NUMBER, CUSTOMER_NAME, LOAN_AMOUNT, LOAN_START_DATE, LOAN_STATUS 
+        FROM DB.SCHEMA.TARGET_TABLE 
+        WHERE IS_ACTIVE = TRUE
+        MINUS
+        SELECT LOAN_NUMBER, CUSTOMER_NAME, LOAN_AMOUNT, LOAN_START_DATE, LOAN_STATUS 
+        FROM DB.SCHEMA.SOURCE_TABLE)
+        ) AS DIFF;
+
+
+
+
+--SCENARIO 2
+--WHEN WE ADD ADDITIONAL COLUMN IN SOURCE.
+    --If SOURCE did ALTER TABLE ADD COLUMN THEN WE ARE GOOD OR IT WILL AGAIN HAVE STREAM STALENESS ISSUE.
+    --Add Additional row as to check how our stream works 
+    --Check stream ; OK 
+    --ALL TEST CASES PASSED
+
+
+
+
+--3. Error in Transformation which make us loose consumed stream.
+    --Once we consumed stream it is gone. so we failed in transformation phase we loose our data.
+
+    SELECT * FROM DB.SCHEMA.SOURCE_TABLE_STREAM;
+
+
+
+
+
+----CREATE AND RESUME TASK
+
+CREATE OR REPLACE TASK DB.SCHEMA.TEST_TASK
+    WAREHOUSE = DW_WH
+    SCHEDULE = 'USING CRON 0 6,10,14,18 * * * America/New_York'
+    WHEN system$stream_has_data('BIFROST.SCHEMA.ACCOUNT_LOCAL_STATUS_STREAM')
+    AS
+    CALL DB.SCHEMA.LOAD_TARGET_TABLE();
+
+ALTER TASK DB.SCHEMA.TEST_TASK SUSPEND;
+
+DROP TASK DB.SCHEMA.TEST_TASK;
+
+
+
+
+
+SELECT SYSTEM$STREAM_HAS_DATA('DB.SCHEMA.SOURCE_TABLE_STREAM');
